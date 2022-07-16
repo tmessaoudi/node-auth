@@ -1,6 +1,7 @@
 import { celebrate, SchemaOptions, Modes, Segments, Joi } from "celebrate";
 import { PWD_RESET_TOKEN_BYTES } from "./config";
 
+// TODO Use https://zod.dev/ for validation
 export const validate = (schema: SchemaOptions) =>
   celebrate(
     schema,

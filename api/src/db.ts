@@ -11,6 +11,8 @@ export const db: Db = {
   passwordResets: [],
 };
 
+// TODO Use Postgres
+
 interface Db {
   users: User[];
   passwordResets: PasswordReset[];
