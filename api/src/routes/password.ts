@@ -8,8 +8,7 @@ import {
   sendResetSchema,
   resetPasswordSchema,
   confirmPasswordSchema,
-} from "../validation";
-import { db } from "../db";
+} from "../validation"
 import { hmacSha256, safeEqual, compress } from "../utils";
 import { hashPassword, comparePassword } from "./auth";
 import {
@@ -19,6 +18,8 @@ import {
   APP_ORIGIN,
   MAIL_FROM,
 } from "../config";
+import sql from "../db"
+import { User } from "../db/user"
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.post(
   async (req, res) => {
     const { email } = req.body;
 
-    const user = db.users.find((user) => user.email === email);
+    const user = User.parse((await sql`SELECT * FROM users WHERE email=${email}`)[0]);
 
     if (!user) {
       // TODO throw Joi error if possible, assuming the above check is async
@@ -47,12 +48,18 @@ router.post(
 
     // NOTE we treat reset tokens like passwords, so we don't store
     // them in plaintext. Instead, we hash and sign them with a secret.
-    db.passwordResets.push({
-      id: db.passwordResets.length + 1,
-      userId: user.id,
-      token: hmacSha256(token, APP_SECRET),
-      expiresAt,
-    });
+    // db.passwordResets.push({
+    //   id: db.passwordResets.length + 1,
+    //   userId: user.id,
+    //   token: hmacSha256(token, APP_SECRET),
+    //   expiresAt,
+    // });
+
+    await sql`
+      insert into password_resets (user_id, token, expires_at) 
+      values (${Number(user.id)}, ${hmacSha256(token, APP_SECRET)}, ${expiresAt})
+      returning id
+    `
 
     const { mailer } = req.app.locals;
     await mailer.sendMail(passwordResetEmail(email, token, user.id));
@@ -72,23 +79,18 @@ router.post(
     const { password } = req.body;
 
     const hashedToken = hmacSha256(String(token), APP_SECRET);
-    const resetToken = db.passwordResets.find(
-      (reset) =>
-        reset.userId === Number(id) && safeEqual(reset.token, hashedToken)
-    );
+    const resetToken = !!(await sql`SELECT * FROM password_resets WHERE user_id=${Number(id)} AND token=${hashedToken}`).length
 
     if (!resetToken) {
       return res.status(401).json({ message: "Token or ID is invalid" });
     }
 
-    const user = db.users.find((user) => user.id === Number(id));
+    const user = User.parse((await sql`SELECT * FROM users WHERE id=${Number(id)}`)[0]);
     if (!user) throw new Error(`User id = ${id} not found`); // unreachable
     user.password = await hashPassword(password);
 
     // Invalidate all user reset tokens
-    db.passwordResets = db.passwordResets.filter(
-      (reset) => reset.userId !== Number(id)
-    );
+    await sql`DELETE FROM password_resets WHERE user_id=${Number(id)}`
 
     res.json({ message: "OK" });
   }
@@ -104,7 +106,7 @@ router.post(
     const { password } = req.body;
     const { userId } = req.session;
 
-    const user = db.users.find((user) => user.id === userId);
+    const user = User.parse((await sql`SELECT * FROM users WHERE id=${userId!}`)[0]);
     if (!user) throw new Error(`User id = ${userId} not found`); // unreachable
 
     const pwdMatches = await comparePassword(password, user.password);

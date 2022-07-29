@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { raw, Router } from "express"
 import { compare, hash } from "bcrypt";
 import { createHash } from "crypto";
 import { validate, loginSchema, registerSchema } from "../validation";
-import { db, User } from "../db";
+import sql from "../db"
+import { User } from "../db/user"
 import { auth, guest } from "../middleware";
 import { SESSION_COOKIE, BCRYPT_SALT_ROUNDS } from "../config";
 import { confirmationEmail } from "./email";
@@ -19,7 +20,7 @@ router.post("/login", validate(loginSchema), async (req, res) => {
   // TODO this lookup isn't constant time, so it can leak information
   // (ex: when the email doesn't exist). When using a DB like Postgres,
   // index the `email` field so that your query is timing-safe.
-  const user = db.users.find((user) => user.email === email);
+  const user = User.parse((await sql`SELECT * FROM users WHERE email=${email}`)[0]);
 
   // NOTE even if the user doesn't exist, we still hash the plaintext
   // password. Although inefficient, this helps mitigate a timing attack.
@@ -60,9 +61,11 @@ router.post("/logout", auth, (req, res) => {
 // Register
 
 router.post("/register", guest, validate(registerSchema), async (req, res) => {
-  const { email, password, name } = req.body;
+  const { email, password, username } = req.body
+  console.log(email, password, username);
 
-  const userExists = db.users.some((user) => user.email === email);
+
+  const userExists = !!(await sql<User[]> `SELECT * FROM users WHERE email=${email}`).length;
 
   if (userExists) {
     // TODO throw Joi error if possible, assuming the above check is async
@@ -71,22 +74,20 @@ router.post("/register", guest, validate(registerSchema), async (req, res) => {
     });
   }
 
-  // Create the user
-  const user: User = {
-    id: db.users.length + 1,
-    email,
-    password: await hashPassword(password),
-    name,
-    verifiedAt: null,
-  };
-  db.users.push(user);
+  const hashedPwd = await hashPassword(password)
+
+  const id: number = (await sql`
+    insert into users (email, password, username) 
+    values (${email}, ${hashedPwd}, ${username})
+    returning id
+  `)[0].id
 
   // Authenticate
-  req.session.userId = user.id;
+  req.session.userId = id;
 
   // Send the email
   const { mailer } = req.app.locals;
-  await mailer.sendMail(confirmationEmail(email, user.id));
+  await mailer.sendMail(confirmationEmail(email, id));
 
   res.status(201).json({ message: "OK" });
 });

@@ -23,7 +23,9 @@
     "helmet": "^4.6.0",
     "ioredis": "^5.2.1",
     "nodemailer": "^6.6.3",
-    "source-map-support": "^0.5.19"
+    "postgres": "^3.2.4",
+    "source-map-support": "^0.5.19",
+    "zod": "^3.17.10"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.0",

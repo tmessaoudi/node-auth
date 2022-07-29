@@ -31,7 +31,7 @@ export const registerSchema = {
   [Segments.BODY]: Joi.object().keys({
     email,
     password,
-    name: Joi.string().max(256).required(),
+    username: Joi.string().max(256).required(),
   }),
 };
 

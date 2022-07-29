@@ -1,6 +1,7 @@
-import { RequestHandler, ErrorRequestHandler } from "express";
-import { db } from "./db";
+import { RequestHandler, ErrorRequestHandler } from "express"
 import { PWD_CONFIRM_EXPIRES_IN_MS } from "./config";
+import sql from "./db"
+import { User } from "./db/user"
 
 // https://expressjs.com/en/starter/faq.html#how-do-i-handle-404-responses
 
@@ -36,11 +37,11 @@ export const guest: RequestHandler = (req, res, next) => {
   next();
 };
 
-export const verified: RequestHandler = (req, res, next) => {
+export const verified: RequestHandler = async (req, res, next) => {
   const { userId } = req.session;
-  const { verifiedAt } = db.users.find((user) => user.id === userId) || {};
+  const user = User.parse((await sql`SELECT * FROM users WHERE id=${Number(userId)}`)[0])
 
-  if (!verifiedAt) {
+  if (!user.verified_at) {
     return res.status(403).json({ message: "Forbidden" });
   }
 

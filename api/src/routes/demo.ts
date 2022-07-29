@@ -1,13 +1,15 @@
 import { Router } from "express";
-import { db } from "../db";
+import sql from "../db"
+import { User } from "../db/user"
 import { auth, verified, pwdConfirmed } from "../middleware";
 
 const router = Router();
 
 router.get("/", (req, res) => res.json({ message: "OK" })); // health
 
-router.get("/me", auth, (req, res) => {
-  return res.json(db.users.find((user) => user.id === req.session.userId));
+router.get("/me", auth, async (req, res) => {
+  const user = User.parse((await sql`SELECT * FROM users WHERE id=${Number(req.session.userId)}`)[0])
+  return res.json(user)
 });
 
 // NOTE how both auth *and* verified are applied in that order.

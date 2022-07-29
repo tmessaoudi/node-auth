@@ -2,7 +2,8 @@ import { Router } from "express";
 import dayjs from "dayjs";
 import { SendMailOptions } from "nodemailer";
 import { validate, verifyEmailSchema, resendEmailSchema } from "../validation";
-import { db } from "../db";
+import sql from "../db"
+import { User } from "../db/user"
 import { safeEqual, hmacSha256, compress } from "../utils";
 import {
   APP_ORIGIN,
@@ -17,7 +18,7 @@ const router = Router();
 
 // NOTE both routes could be behind `auth` middleware in which case
 // we wouldn't need to ask for the user ID or email.
-router.post("/email/verify", validate(verifyEmailSchema), (req, res) => {
+router.post("/email/verify", validate(verifyEmailSchema), async (req, res) => {
   const { id, expires } = req.query;
 
   const expectedUrl = confirmationUrl(Number(id), Number(expires));
@@ -31,15 +32,15 @@ router.post("/email/verify", validate(verifyEmailSchema), (req, res) => {
     return res.status(400).json({ message: "URL has expired" });
   }
 
-  const user = db.users.find((user) => user.id === Number(id));
+  const user = User.parse((await sql`SELECT * FROM users WHERE id=${Number(id)}`)[0])
 
-  if (!user || user.verifiedAt) {
+  if (!user || user.verified_at) {
     return res
       .status(400)
       .json({ message: "Email is incorrect or already verified" });
   }
 
-  user.verifiedAt = new Date().toISOString();
+  user.verified_at = new Date();
 
   res.json({ message: "OK" });
 });
@@ -48,9 +49,9 @@ router.post("/email/verify", validate(verifyEmailSchema), (req, res) => {
 
 router.post("/email/resend", validate(resendEmailSchema), async (req, res) => {
   const { email } = req.body;
-  const user = db.users.find((user) => user.email === email);
+  const user = User.parse((await sql`SELECT * FROM users WHERE email=${email}`)[0])
 
-  if (!user || user.verifiedAt) {
+  if (!user || user.verified_at) {
     return res
       .status(400)
       .json({ message: "Email is incorrect or already verified" });
